@@ -190,7 +190,23 @@ function GameSelection({
   );
 }
 
-function createCop(gameDetails: GameDetails) {
+interface Cop {
+  begin: (random: number) => {
+    newCop: Cop;
+    newCopPositions: number[];
+  };
+  move: (
+    copPositions: number[],
+    robberPosition: number,
+    random: number
+  ) => {
+    newCop: Cop;
+    newCopPositions: number[];
+  };
+  end: (copPositions: number[], robberPosition: number) => Cop;
+}
+
+function createCop(gameDetails: GameDetails): Cop {
   let { graphIndex, numberOfCops, cop } = gameDetails;
   switch (cop) {
     default: {
@@ -239,7 +255,26 @@ function createCop(gameDetails: GameDetails) {
   }
 }
 
-function createRobber(gameDetails: GameDetails) {
+interface Robber {
+  begin: (
+    copPositions: number[],
+    random: number
+  ) => {
+    newRobber: Robber;
+    newRobberPosition: number;
+  };
+  move: (
+    copPositions: number[],
+    robberPosition: number,
+    random: number
+  ) => {
+    newRobber: Robber;
+    newRobberPosition: number;
+  };
+  end: (copPositions: number[], robberPosition: number) => Robber;
+}
+
+function createRobber(gameDetails: GameDetails): Robber {
   let { graphIndex, robber } = gameDetails;
   switch (robber) {
     default: {
@@ -283,6 +318,141 @@ interface GameProps {
   setView: (view: AppView) => void;
 }
 
+interface GameState {
+  score: [number, number];
+  cop: Cop;
+  robber: Robber;
+  copPositions: null | number[];
+  robberPosition: null | number;
+  roundsLeft: number;
+  turn: "Cop" | "Robber" | "Over";
+}
+
+function nextGameState(
+  state: GameState,
+  gameDetails: GameDetails,
+  random: number
+): GameState {
+  let { score, cop, robber, copPositions, robberPosition, roundsLeft, turn } =
+    state;
+
+  if (turn === "Over") {
+    return {
+      score,
+      cop,
+      robber,
+      copPositions: null,
+      robberPosition: null,
+      roundsLeft: gameDetails.numberOfSteps,
+      turn: "Cop",
+    };
+  } else if (turn === "Cop") {
+    if (copPositions === null) {
+      let { newCop, newCopPositions } = cop.begin(random);
+      return {
+        score,
+        cop: newCop,
+        robber,
+        copPositions: newCopPositions,
+        robberPosition,
+        roundsLeft,
+        turn: "Robber",
+      };
+    } else {
+      let { newCop, newCopPositions } = cop.move(
+        copPositions,
+        robberPosition as number,
+        random
+      );
+      // One of the cops is at the same position as the robber.
+      if (newCopPositions.findIndex((v) => v === robberPosition) !== -1) {
+        newCop = newCop.end(newCopPositions, robberPosition as number);
+        let newRobber = robber.end(newCopPositions, robberPosition as number);
+        return {
+          score: [score[0] + 1, score[1]],
+          cop: newCop,
+          robber: newRobber,
+          copPositions: newCopPositions,
+          robberPosition,
+          roundsLeft,
+          turn: "Over",
+        };
+      }
+      return {
+        score,
+        cop: newCop,
+        robber,
+        copPositions: newCopPositions,
+        robberPosition,
+        roundsLeft,
+        turn: "Robber",
+      };
+    }
+  } else {
+    let newRobber;
+    let newRobberPosition: number;
+    if (robberPosition === null) {
+      let beginResult = robber.begin(copPositions as number[], random);
+      newRobber = beginResult.newRobber;
+      newRobberPosition = beginResult.newRobberPosition;
+    } else {
+      let moveResult = robber.move(
+        copPositions as number[],
+        robberPosition,
+        random
+      );
+      newRobber = moveResult.newRobber;
+      newRobberPosition = moveResult.newRobberPosition;
+    }
+    // One of the cops is at the same position as the robber.
+    if (
+      (copPositions as number[]).findIndex((v) => v === newRobberPosition) !==
+      -1
+    ) {
+      let newCop = cop.end(copPositions as number[], robberPosition as number);
+      newRobber = newRobber.end(
+        copPositions as number[],
+        robberPosition as number
+      );
+      return {
+        score: [score[0] + 1, score[1]],
+        cop: newCop,
+        robber: newRobber,
+        copPositions,
+        robberPosition: newRobberPosition,
+        roundsLeft,
+        turn: "Over",
+      };
+    }
+    // No more rounds left, so robber wins.
+    if (roundsLeft === 0 || (roundsLeft === 1 && robberPosition !== null)) {
+      let newCop = cop.end(copPositions as number[], robberPosition as number);
+      newRobber = newRobber.end(
+        copPositions as number[],
+        robberPosition as number
+      );
+      return {
+        score: [score[0], score[1] + 1],
+        cop: newCop,
+        robber: newRobber,
+        copPositions,
+        robberPosition: newRobberPosition,
+        roundsLeft: 0,
+        turn: "Over",
+      };
+    }
+    return {
+      score,
+      cop,
+      robber: newRobber,
+      copPositions,
+      robberPosition: newRobberPosition,
+      roundsLeft: robberPosition !== null ? roundsLeft - 1 : roundsLeft,
+      turn: "Cop",
+    };
+  }
+}
+
 function Game({ gameDetails, setView }: GameProps) {
   const [gameState, setGameState] = useState({
     score: [0, 0],
@@ -292,156 +462,30 @@ function Game({ gameDetails, setView }: GameProps) {
     robberPosition: null as null | number,
     roundsLeft: gameDetails.numberOfSteps,
     turn: "Cop" as "Cop" | "Robber" | "Over",
-  });
+  } as GameState);
 
   useEffect(() => {
     let interval = setInterval(() => {
       let random = Math.random();
-      setGameState((state) => {
-        let {
-          score,
-          cop,
-          robber,
-          copPositions,
-          robberPosition,
-          roundsLeft,
-          turn,
-        } = state;
-
-        if (turn === "Over") {
-          return {
-            score,
-            cop,
-            robber,
-            copPositions: null,
-            robberPosition: null,
-            roundsLeft: gameDetails.numberOfSteps,
-            turn: "Cop",
-          };
-        } else if (turn === "Cop") {
-          if (copPositions === null) {
-            let { newCop, newCopPositions } = cop.begin(random);
-            return {
-              score,
-              cop: newCop,
-              robber,
-              copPositions: newCopPositions,
-              robberPosition,
-              roundsLeft,
-              turn: "Robber",
-            };
-          } else {
-            let { newCop, newCopPositions } = cop.move(
-              copPositions,
-              robberPosition as number,
-              random
-            );
-            // One of the cops is at the same position as the robber.
-            if (newCopPositions.findIndex((v) => v === robberPosition) !== -1) {
-              newCop = newCop.end(newCopPositions, robberPosition as number);
-              let newRobber = robber.end(
-                newCopPositions,
-                robberPosition as number
-              );
-              return {
-                score: [score[0] + 1, score[1]],
-                cop: newCop,
-                robber: newRobber,
-                copPositions: newCopPositions,
-                robberPosition,
-                roundsLeft,
-                turn: "Over",
-              };
-            }
-            return {
-              score,
-              cop: newCop,
-              robber,
-              copPositions: newCopPositions,
-              robberPosition,
-              roundsLeft,
-              turn: "Robber",
-            };
-          }
-        } else {
-          let newRobber;
-          let newRobberPosition: number;
-          if (robberPosition === null) {
-            let beginResult = robber.begin(copPositions as number[], random);
-            newRobber = beginResult.newRobber;
-            newRobberPosition = beginResult.newRobberPosition;
-          } else {
-            let moveResult = robber.move(
-              copPositions as number[],
-              robberPosition,
-              random
-            );
-            newRobber = moveResult.newRobber;
-            newRobberPosition = moveResult.newRobberPosition;
-          }
-          // One of the cops is at the same position as the robber.
-          if (
-            (copPositions as number[]).findIndex(
-              (v) => v === newRobberPosition
-            ) !== -1
-          ) {
-            let newCop = cop.end(
-              copPositions as number[],
-              robberPosition as number
-            );
-            newRobber = newRobber.end(
-              copPositions as number[],
-              robberPosition as number
-            );
-            return {
-              score: [score[0] + 1, score[1]],
-              cop: newCop,
-              robber: newRobber,
-              copPositions,
-              robberPosition: newRobberPosition,
-              roundsLeft,
-              turn: "Over",
-            };
-          }
-          // No more rounds left, so robber wins.
-          if (
-            roundsLeft === 0 ||
-            (roundsLeft === 1 && robberPosition !== null)
-          ) {
-            let newCop = cop.end(
-              copPositions as number[],
-              robberPosition as number
-            );
-            newRobber = newRobber.end(
-              copPositions as number[],
-              robberPosition as number
-            );
-            return {
-              score: [score[0], score[1] + 1],
-              cop: newCop,
-              robber: newRobber,
-              copPositions,
-              robberPosition: newRobberPosition,
-              roundsLeft: 0,
-              turn: "Over",
-            };
-          }
-          return {
-            score,
-            cop,
-            robber: newRobber,
-            copPositions,
-            robberPosition: newRobberPosition,
-            roundsLeft: robberPosition !== null ? roundsLeft - 1 : roundsLeft,
-            turn: "Cop",
-          };
-        }
-      });
+      setGameState((state) => nextGameState(state, gameDetails, random));
     }, 700);
     return () => {
       clearInterval(interval);
     };
   }, []);
+
+  function play1000Games() {
+    let state = gameState;
+    let games = 0;
+    while (games < 1000) {
+      state = nextGameState(state, gameDetails, Math.random());
+      if (state.turn === "Over") {
+        games++;
+      }
+    }
+    state = nextGameState(state, gameDetails, Math.random()); // Start the new game
+    setGameState(state);
+  }
 
   let graph = TEMPLATE_GRAPHS[gameDetails.graphIndex];
   let graphEdges: JSX.Element[] = [];
@@ -467,6 +511,7 @@ function Game({ gameDetails, setView }: GameProps) {
       <span>
         {gameState.score[0]} - {gameState.score[1]}
       </span>
+      <button onClick={play1000Games}>Play 1000 games</button>
       <svg width="300" height="300" viewBox="0 0 100 100">
         {graphEdges}
         {graph.vertices.map((v, i) => (
