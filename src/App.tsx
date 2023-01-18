@@ -50,9 +50,46 @@ const TEMPLATE_GRAPHS: Graph[] = [
     ],
     adjacencyList: [[1], [0, 2], [1, 3], [2, 4], [3]],
   },
+  {
+    name: "Hexagon",
+    vertices: [
+      {
+        x: 50.0,
+        y: 10.0,
+      },
+      {
+        x: 15.36,
+        y: 30.0,
+      },
+      {
+        x: 15.36,
+        y: 70.0,
+      },
+      {
+        x: 50.0,
+        y: 90.0,
+      },
+      {
+        x: 84.64,
+        y: 70.0,
+      },
+      {
+        x: 84.64,
+        y: 30.0,
+      },
+    ],
+    adjacencyList: [
+      [5, 1],
+      [0, 2],
+      [1, 3],
+      [2, 4],
+      [3, 5],
+      [4, 0],
+    ],
+  },
 ];
 
-const PLAYER_TYPES = ["Random"];
+const PLAYER_TYPES = ["Random", "MENACE"];
 type AppView = "GameSelection" | "Game";
 
 interface GameDetails {
@@ -206,9 +243,284 @@ interface Cop {
   end: (copPositions: number[], robberPosition: number) => Cop;
 }
 
+interface Bag {
+  choose: (random: number) => number;
+  increase: (index: number, amount: number) => Bag;
+  decrease: (index: number, amount: number) => Bag;
+}
+
+function createBag(counts: number[]): Bag {
+  return {
+    choose: (random: number) => {
+      let total = 0;
+      counts.forEach((count) => {
+        total += count;
+      });
+      let choice = Math.floor(random * total) + 1;
+      let curr = 0;
+      for (let i = 0; i < counts.length; i++) {
+        if (curr + 1 <= choice && choice <= curr + counts[i]) {
+          return i;
+        }
+        curr += counts[i];
+      }
+      return -1;
+    },
+    increase: (index: number, amount: number) => {
+      return createBag([
+        ...counts.slice(0, index),
+        counts[index] + amount,
+        ...counts.slice(index + 1),
+      ]);
+    },
+    decrease: (index: number, amount: number) => {
+      let newCounts = [...counts];
+      newCounts[index] =
+        newCounts[index] - amount > 0 ? newCounts[index] - amount : 0;
+      let total = 0;
+      newCounts.forEach((count) => {
+        total += count;
+      });
+      if (total > 0) {
+        return createBag(newCounts);
+      } else {
+        return createBag(new Array(newCounts.length).fill(50));
+      }
+    },
+  };
+}
+
+function createMenaceCop(
+  gameDetails: GameDetails,
+  bags: Map<string, Bag>,
+  moves: { bagKey: string; move: number }[]
+) {
+  let { graphIndex, numberOfCops } = gameDetails;
+  let player = {
+    begin: (random: number) => {
+      let startBag = bags.get("");
+      if (!startBag) {
+        let numberOfVertices = TEMPLATE_GRAPHS[graphIndex].vertices.length;
+        let newBags = new Map(bags);
+        let bag = createBag(
+          new Array(Math.pow(numberOfVertices, numberOfCops)).fill(50)
+        );
+        newBags.set("", bag);
+
+        let choice = bag.choose(random);
+        let newCop = createMenaceCop(gameDetails, newBags, [
+          { bagKey: "", move: choice },
+        ]);
+        let newCopPositions = [];
+        for (let i = 0; i < numberOfCops; i++) {
+          newCopPositions.push(choice % numberOfVertices);
+          choice = Math.floor(choice / numberOfVertices);
+        }
+        return {
+          newCop,
+          newCopPositions,
+        };
+      } else {
+        let choice = startBag.choose(random);
+        let newCop = createMenaceCop(gameDetails, bags, [
+          { bagKey: "", move: choice },
+        ]);
+        let numberOfVertices = TEMPLATE_GRAPHS[graphIndex].vertices.length;
+        let newCopPositions = [];
+        for (let i = 0; i < numberOfCops; i++) {
+          newCopPositions.push(choice % numberOfVertices);
+          choice = Math.floor(choice / numberOfVertices);
+        }
+        return {
+          newCop,
+          newCopPositions,
+        };
+      }
+    },
+    move: (copPositions: number[], robberPosition: number, random: number) => {
+      let bagKey = JSON.stringify([...copPositions, robberPosition]);
+      let moveBag = bags.get(bagKey);
+      if (!moveBag) {
+        let newBags = new Map(bags);
+        let totalChoices = 1;
+        copPositions.forEach((cop) => {
+          let adjacentVertices = TEMPLATE_GRAPHS[graphIndex].adjacencyList[cop];
+          totalChoices *= adjacentVertices.length + 1;
+        });
+        let bag = createBag(new Array(totalChoices).fill(50));
+        newBags.set(bagKey, bag);
+
+        let choice = bag.choose(random);
+        let newCop = createMenaceCop(gameDetails, newBags, [
+          ...moves,
+          { bagKey, move: choice },
+        ]);
+        let newCopPositions = [];
+        for (let i = 0; i < numberOfCops; i++) {
+          let adjacentVertices =
+            TEMPLATE_GRAPHS[graphIndex].adjacencyList[copPositions[i]];
+          let currChoice = choice % (adjacentVertices.length + 1);
+          if (currChoice === adjacentVertices.length) {
+            newCopPositions.push(copPositions[i]);
+          } else {
+            newCopPositions.push(adjacentVertices[currChoice]);
+          }
+          choice = Math.floor(choice / (adjacentVertices.length + 1));
+        }
+
+        return {
+          newCop,
+          newCopPositions,
+        };
+      } else {
+        let choice = moveBag.choose(random);
+        let newCop = createMenaceCop(gameDetails, bags, [
+          ...moves,
+          { bagKey, move: choice },
+        ]);
+        let newCopPositions = [];
+        for (let i = 0; i < numberOfCops; i++) {
+          let adjacentVertices =
+            TEMPLATE_GRAPHS[graphIndex].adjacencyList[copPositions[i]];
+          let currChoice = choice % (adjacentVertices.length + 1);
+          if (currChoice === adjacentVertices.length) {
+            newCopPositions.push(copPositions[i]);
+          } else {
+            newCopPositions.push(adjacentVertices[currChoice]);
+          }
+          choice = Math.floor(choice / (adjacentVertices.length + 1));
+        }
+
+        return {
+          newCop,
+          newCopPositions,
+        };
+      }
+    },
+    end: (copPositions: number[], robberPosition: number) => {
+      let newBags = new Map(bags);
+      if (copPositions.findIndex((cop) => cop === robberPosition) !== -1) {
+        moves.forEach(({ bagKey, move }) => {
+          let bag = newBags.get(bagKey);
+          let newBag = (bag as Bag).increase(move, 3);
+          newBags.set(bagKey, newBag);
+        });
+      } else {
+        moves.forEach(({ bagKey, move }) => {
+          let bag = newBags.get(bagKey);
+          let newBag = (bag as Bag).decrease(move, 1);
+          newBags.set(bagKey, newBag);
+        });
+      }
+      return createMenaceCop(gameDetails, newBags, []);
+    },
+  };
+  return player;
+}
+
+function createMenaceRobber(
+  gameDetails: GameDetails,
+  bags: Map<string, Bag>,
+  moves: { bagKey: string; move: number }[]
+): Robber {
+  let { graphIndex } = gameDetails;
+  let player = {
+    begin: (copPositions: number[], random: number) => {
+      let bagKey = JSON.stringify([...copPositions]);
+      let startBag = bags.get(bagKey);
+      if (!startBag) {
+        let numberOfVertices = TEMPLATE_GRAPHS[graphIndex].vertices.length;
+        let newBags = new Map(bags);
+        let bag = createBag(new Array(numberOfVertices).fill(50));
+        newBags.set(bagKey, bag);
+
+        let choice = bag.choose(random);
+        let newRobber = createMenaceRobber(gameDetails, newBags, [
+          { bagKey, move: choice },
+        ]);
+        return {
+          newRobber,
+          newRobberPosition: choice,
+        };
+      } else {
+        let choice = startBag.choose(random);
+        let newRobber = createMenaceRobber(gameDetails, bags, [
+          { bagKey, move: choice },
+        ]);
+        return {
+          newRobber,
+          newRobberPosition: choice,
+        };
+      }
+    },
+    move: (copPositions: number[], robberPosition: number, random: number) => {
+      let bagKey = JSON.stringify([...copPositions, robberPosition]);
+      let moveBag = bags.get(bagKey);
+      if (!moveBag) {
+        let newBags = new Map(bags);
+        let adjacentVertices =
+          TEMPLATE_GRAPHS[graphIndex].adjacencyList[robberPosition];
+        let bag = createBag(new Array(adjacentVertices.length + 1).fill(50));
+        newBags.set(bagKey, bag);
+
+        let choice = bag.choose(random);
+        let newRobber = createMenaceRobber(gameDetails, newBags, [
+          ...moves,
+          { bagKey, move: choice },
+        ]);
+
+        return {
+          newRobber,
+          newRobberPosition:
+            choice === adjacentVertices.length
+              ? robberPosition
+              : adjacentVertices[choice],
+        };
+      } else {
+        let choice = moveBag.choose(random);
+        let newRobber = createMenaceRobber(gameDetails, bags, [
+          ...moves,
+          { bagKey, move: choice },
+        ]);
+        let adjacentVertices =
+          TEMPLATE_GRAPHS[graphIndex].adjacencyList[robberPosition];
+
+        return {
+          newRobber,
+          newRobberPosition:
+            choice === adjacentVertices.length
+              ? robberPosition
+              : adjacentVertices[choice],
+        };
+      }
+    },
+    end: (copPositions: number[], robberPosition: number) => {
+      let newBags = new Map(bags);
+      if (copPositions.findIndex((cop) => cop === robberPosition) !== -1) {
+        moves.forEach(({ bagKey, move }) => {
+          let bag = newBags.get(bagKey);
+          let newBag = (bag as Bag).decrease(move, 1);
+          newBags.set(bagKey, newBag);
+        });
+      } else {
+        moves.forEach(({ bagKey, move }) => {
+          let bag = newBags.get(bagKey);
+          let newBag = (bag as Bag).increase(move, 3);
+          newBags.set(bagKey, newBag);
+        });
+      }
+      return createMenaceRobber(gameDetails, newBags, []);
+    },
+  };
+  return player;
+}
+
 function createCop(gameDetails: GameDetails): Cop {
   let { graphIndex, numberOfCops, cop } = gameDetails;
   switch (cop) {
+    case "MENACE": {
+      return createMenaceCop(gameDetails, new Map(), []);
+    }
     default: {
       let player = {
         begin: (random: number) => {
@@ -277,6 +589,9 @@ interface Robber {
 function createRobber(gameDetails: GameDetails): Robber {
   let { graphIndex, robber } = gameDetails;
   switch (robber) {
+    case "MENACE": {
+      return createMenaceRobber(gameDetails, new Map(), []);
+    }
     default: {
       let player = {
         begin: (copPositions: number[], random: number) => {
@@ -409,11 +724,8 @@ function nextGameState(
       (copPositions as number[]).findIndex((v) => v === newRobberPosition) !==
       -1
     ) {
-      let newCop = cop.end(copPositions as number[], robberPosition as number);
-      newRobber = newRobber.end(
-        copPositions as number[],
-        robberPosition as number
-      );
+      let newCop = cop.end(copPositions as number[], newRobberPosition);
+      newRobber = newRobber.end(copPositions as number[], newRobberPosition);
       return {
         score: [score[0] + 1, score[1]],
         cop: newCop,
@@ -426,11 +738,8 @@ function nextGameState(
     }
     // No more rounds left, so robber wins.
     if (roundsLeft === 0 || (roundsLeft === 1 && robberPosition !== null)) {
-      let newCop = cop.end(copPositions as number[], robberPosition as number);
-      newRobber = newRobber.end(
-        copPositions as number[],
-        robberPosition as number
-      );
+      let newCop = cop.end(copPositions as number[], newRobberPosition);
+      newRobber = newRobber.end(copPositions as number[], newRobberPosition);
       return {
         score: [score[0], score[1] + 1],
         cop: newCop,
