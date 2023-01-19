@@ -119,7 +119,14 @@ function GameSelection({
       let v1 = TEMPLATE_GRAPHS[graphIndex].vertices[i];
       let v2 = TEMPLATE_GRAPHS[graphIndex].vertices[j];
       graphEdges.push(
-        <line x1={v1.x} y1={v1.y} x2={v2.x} y2={v2.y} stroke="black"></line>
+        <line
+          key={`${i},${j}`}
+          x1={v1.x}
+          y1={v1.y}
+          x2={v2.x}
+          y2={v2.y}
+          stroke="black"
+        ></line>
       );
     });
   });
@@ -132,7 +139,7 @@ function GameSelection({
   return (
     <div>
       <p className="text-3xl font-bold">Cops and Robbers</p>
-      <form onSubmit={formSubmit}>
+      <form onSubmit={formSubmit} className="space-y-2">
         <div>
           <span>Graph: </span>
           <select
@@ -221,7 +228,11 @@ function GameSelection({
             ))}
           </select>
         </div>
-        <input type="submit" value="Start" />
+        <input
+          type="submit"
+          value="Start"
+          className="bg-sky-800 text-white px-3 py-1 rounded"
+        />
       </form>
     </div>
   );
@@ -803,25 +814,40 @@ function Game({ gameDetails, setView }: GameProps) {
       let v1 = graph.vertices[i];
       let v2 = graph.vertices[j];
       graphEdges.push(
-        <line x1={v1.x} y1={v1.y} x2={v2.x} y2={v2.y} stroke="black"></line>
+        <line
+          key={`${i},${j}`}
+          x1={v1.x}
+          y1={v1.y}
+          x2={v2.x}
+          y2={v2.y}
+          stroke="black"
+        ></line>
       );
     });
   });
 
   return (
     <div>
-      <button
-        onClick={() => {
-          setView("GameSelection");
-        }}
-      >
-        New game
-      </button>
-      <span>
+      <div className="flex justify-between my-3">
+        <button
+          onClick={play1000Games}
+          className="bg-sky-800 text-white px-2 py-1 rounded"
+        >
+          Play 1000 games
+        </button>
+        <button
+          onClick={() => {
+            setView("GameSelection");
+          }}
+          className="bg-sky-800 text-white px-2 py-1 rounded"
+        >
+          New game
+        </button>
+      </div>
+      <p className="text-2xl text-center">
         {gameState.score[0]} - {gameState.score[1]}
-      </span>
-      <button onClick={play1000Games}>Play 1000 games</button>
-      <svg width="300" height="300" viewBox="0 0 100 100">
+      </p>
+      <svg width="300" height="300" viewBox="0 0 100 100" className="mx-auto">
         {graphEdges}
         {graph.vertices.map((v, i) => (
           <circle cx={v.x} cy={v.y} r="2" key={i}></circle>

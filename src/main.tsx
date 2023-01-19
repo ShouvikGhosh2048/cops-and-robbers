@@ -9,7 +9,7 @@ import "./index.css";
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <HashRouter>
-      <div className="max-w-lg mx-auto">
+      <div className="max-w-lg mx-auto p-2">
         <div className="flex justify-between">
           <Link to="/" className="text-xl">
             App
