@@ -111,7 +111,11 @@ function GameSelection({
   setGameDetails,
   setView,
 }: GameSelectionProps) {
-  let { graphIndex, numberOfCops, numberOfSteps, cop, robber } = gameDetails;
+  // Seperate variable for numberOfSteps as we want to allow a blank field while typing.
+  const [numberOfSteps, setNumberOfSteps] = useState(
+    `${gameDetails.numberOfSteps}`
+  );
+  let { graphIndex, numberOfCops, cop, robber } = gameDetails;
 
   let graphEdges: JSX.Element[] = [];
   TEMPLATE_GRAPHS[graphIndex].adjacencyList.forEach((list, i) => {
@@ -130,6 +134,15 @@ function GameSelection({
       );
     });
   });
+
+  let numberOfCopsOptions: JSX.Element[] = [];
+  for (let i = 1; i <= 3; i++) {
+    numberOfCopsOptions.push(
+      <option key={i} value={i}>
+        {i}
+      </option>
+    );
+  }
 
   function formSubmit(e: FormEvent) {
     e.preventDefault();
@@ -168,19 +181,17 @@ function GameSelection({
         </div>
         <div>
           <span>Number of cops: </span>
-          <input
-            type="number"
+          <select
             value={numberOfCops}
-            min="1"
-            max="3"
-            step="1"
             onChange={(e) => {
               setGameDetails({
                 ...gameDetails,
                 numberOfCops: Number(e.target.value),
               });
             }}
-          />
+          >
+            {numberOfCopsOptions}
+          </select>
         </div>
         <div>
           <span>Number of steps: </span>
@@ -191,11 +202,13 @@ function GameSelection({
             max="100"
             step="1"
             onChange={(e) => {
+              setNumberOfSteps(e.target.value);
               setGameDetails({
                 ...gameDetails,
                 numberOfSteps: Number(e.target.value),
               });
             }}
+            required
           />
         </div>
         <div>
